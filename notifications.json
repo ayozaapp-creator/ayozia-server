@@ -1,0 +1,74 @@
+[
+  {
+    "id": "1e8bee2c-b27d-4fce-b594-6af572cd76f9",
+    "toId": "6e1795a8-7109-4a79-9c18-840c737bf3f5",
+    "fromId": "d52a09d5-96de-482c-a527-0d542dea7921",
+    "kind": "message",
+    "meta": {
+      "chatId": "6e1795a8-7109-4a79-9c18-840c737bf3f5-d52a09d5-96de-482c-a527-0d542dea7921",
+      "messageId": "a17aa48e-6032-4e25-bbbc-14d6e2d97b98",
+      "preview": "Hey"
+    },
+    "actor": {
+      "id": "d52a09d5-96de-482c-a527-0d542dea7921",
+      "username": "Riri",
+      "avatarUrl": null
+    },
+    "createdAt": "2025-11-21T18:19:01.785Z",
+    "read": true
+  },
+  {
+    "id": "73d95da4-b80d-41f9-ad5b-1a4f1b2dc252",
+    "toId": "d52a09d5-96de-482c-a527-0d542dea7921",
+    "fromId": "6e1795a8-7109-4a79-9c18-840c737bf3f5",
+    "kind": "message",
+    "meta": {
+      "chatId": "6e1795a8-7109-4a79-9c18-840c737bf3f5-d52a09d5-96de-482c-a527-0d542dea7921",
+      "messageId": "6753025a-fa51-4f16-9c82-df2718793543",
+      "preview": "Hey"
+    },
+    "actor": {
+      "id": "6e1795a8-7109-4a79-9c18-840c737bf3f5",
+      "username": "Danjeldanjel",
+      "avatarUrl": "http://192.168.0.224:5000/uploads/avatars/6e1795a8-7109-4a79-9c18-840c737bf3f5-1763744982303.jpg"
+    },
+    "createdAt": "2025-11-21T18:19:13.783Z",
+    "read": true
+  },
+  {
+    "id": "8070b25c-b305-44e1-b4db-47150ce21737",
+    "toId": "6e1795a8-7109-4a79-9c18-840c737bf3f5",
+    "fromId": "d52a09d5-96de-482c-a527-0d542dea7921",
+    "kind": "message",
+    "meta": {
+      "chatId": "6e1795a8-7109-4a79-9c18-840c737bf3f5-d52a09d5-96de-482c-a527-0d542dea7921",
+      "messageId": "9244d4ae-f5f4-4b49-8f4f-75d233b372da",
+      "preview": "📎 Medien"
+    },
+    "actor": {
+      "id": "d52a09d5-96de-482c-a527-0d542dea7921",
+      "username": "Riri",
+      "avatarUrl": null
+    },
+    "createdAt": "2025-11-21T18:19:33.166Z",
+    "read": true
+  },
+  {
+    "id": "7cda9288-7e15-4e5e-8d1b-ea526f0f68bd",
+    "toId": "6e1795a8-7109-4a79-9c18-840c737bf3f5",
+    "fromId": "d52a09d5-96de-482c-a527-0d542dea7921",
+    "kind": "message",
+    "meta": {
+      "chatId": "6e1795a8-7109-4a79-9c18-840c737bf3f5-d52a09d5-96de-482c-a527-0d542dea7921",
+      "messageId": "db3fefea-606e-4dcc-8039-619f62ae5163",
+      "preview": "Was geht"
+    },
+    "actor": {
+      "id": "d52a09d5-96de-482c-a527-0d542dea7921",
+      "username": "Riri",
+      "avatarUrl": null
+    },
+    "createdAt": "2025-11-21T20:12:55.114Z",
+    "read": true
+  }
+]
