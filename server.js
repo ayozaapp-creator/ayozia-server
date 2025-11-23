@@ -30,6 +30,32 @@ app.use((req, _res, next) => {
   next();
 });
 
+// ───────────── Beta-Limit – Testphase endet nach 3 Tagen ─────────────
+// Bis einschließlich 25.11.2025 23:59:59 UTC ist der Server nutzbar.
+// Danach gibt es für alle Requests 403 "Testphase beendet".
+const BETA_UNTIL = new Date("2025-11-25T23:59:59Z");
+
+app.use((req, res, next) => {
+  const now = new Date();
+
+  // /health & /verify-email dürfen immer durch, damit du den Server checken
+  // und Links aus Mails anklicken kannst
+  if (req.path === "/health" || req.path.startsWith("/verify-email")) {
+    return next();
+  }
+
+  if (now > BETA_UNTIL) {
+    return res.status(403).json({
+      message:
+        "Die Testphase von Ayozia ist beendet. Diese Dev-Version ist nicht mehr verfügbar.",
+      code: "BETA_EXPIRED",
+      betaUntil: BETA_UNTIL.toISOString(),
+    });
+  }
+
+  next();
+});
+
 // ⚠️ Statische Auslieferung von Uploads
 const UPLOADS_DIR = path.join(__dirname, "uploads");
 const AVATARS_DIR = path.join(UPLOADS_DIR, "avatars");
@@ -170,6 +196,11 @@ function normalizeUser(raw) {
       typeof raw.wallet === "number"
         ? raw.wallet
         : Number(raw.wallet || 0) || 0,
+
+    // 🔐 Felder für E-Mail-Verifizierung
+    emailVerifyToken: raw.emailVerifyToken ?? null,
+    emailVerifyExpires: raw.emailVerifyExpires ?? null,
+    verifiedAt: raw.verifiedAt ?? null,
   };
 }
 
@@ -206,12 +237,16 @@ function sanitize(u) {
   };
 }
 
-// ─────────────── Mailtrap (optional) ───────────────
+
+// ─────────────── Mail (Gmail SMTP) ───────────────
 const transporter = nodemailer.createTransport({
-  host: "sandbox.smtp.mailtrap.io",
-  port: 2525,
-  auth: { user: "58ef0ea595b0aa", pass: "5bed9a5155278c" },
+  service: "gmail",
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
 });
+
 
 // ───────────── MESSAGES / CHAT (Shared Helpers) ─────────────
 const MESSAGES_FILE = path.join(__dirname, "messages.json");
@@ -316,26 +351,36 @@ app.post("/register", async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(String(password).trim(), 10);
-    const id = crypto.randomUUID
-      ? crypto.randomUUID()
-      : Date.now().toString();
+    const id =
+      typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : Date.now().toString();
+
+    // 🔐 Token für Verifizierung
+    const emailVerifyToken = crypto.randomBytes(32).toString("hex");
+    const emailVerifyExpires = new Date(
+      Date.now() + 48 * 60 * 60 * 1000
+    ).toISOString(); // 48h gültig
 
     const userRecord = {
       id,
       email: normEmail,
       username: normUser,
       passwordHash,
-      isVerified: true, // Dev-Phase
+      isVerified: false, // ❗ jetzt wirklich erstmal NICHT verifiziert
       createdAt: new Date().toISOString(),
       avatarUrl: null,
       bio: "",
-      wallet: 0, // 💰 Startguthaben
+      wallet: 0,
+      emailVerifyToken,
+      emailVerifyExpires,
+      verifiedAt: null,
     };
 
     users.push(userRecord);
     writeUsers(users);
 
-    // ✅ Welcome-DM für NEUE Accounts
+    // ✅ Welcome-DM für neue Accounts (wie vorher)
     try {
       const welcomeText =
         "🌟 Willkommen bei Ayozia!\n\n" +
@@ -355,18 +400,34 @@ app.post("/register", async (req, res) => {
       console.warn("welcome-send failed:", e?.message);
     }
 
+    // 🔗 Verifizierungslink bauen
     const baseUrl =
-      process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
-    const verifyLink = `${baseUrl}/verify/dummy`;
+      process.env.PUBLIC_BASE_URL ||
+      `${req.protocol}://${req.get("host")}`.replace(/\/$/, "");
+    const verifyLink = `${baseUrl}/verify-email?token=${encodeURIComponent(
+      emailVerifyToken
+    )}`;
 
+    // 📧 Mail verschicken (Mailtrap in Dev)
     try {
       await transporter.sendMail({
         from: '"Ayozia" <no-reply@ayozia.com>',
         to: normEmail,
-        subject: `🌟 Willkommen bei Ayozia, ${normUser}!`,
-        html: `<p>Hallo ${normUser}, willkommen bei <b>Ayozia</b>!</p>
-               <p>(Dev) Bestätigungslink: <a href="${verifyLink}">${verifyLink}</a></p>`,
+        subject: `🌟 Willkommen bei Ayozia, ${normUser}! Bitte bestätige deine E-Mail.`,
+        html: `
+          <p>Hallo ${normUser},</p>
+          <p>willkommen bei <b>Ayozia</b>! Bitte bestätige deine E-Mail-Adresse, um dein Konto zu aktivieren.</p>
+          <p>
+            <a href="${verifyLink}" style="display:inline-block;padding:10px 18px;background:#ff1ff1;color:#fff;border-radius:6px;text-decoration:none;">
+              E-Mail jetzt bestätigen
+            </a>
+          </p>
+          <p>Oder kopiere diesen Link in deinen Browser:</p>
+          <p><code>${verifyLink}</code></p>
+          <p>Der Link ist 48 Stunden gültig.</p>
+        `,
       });
+      console.log("Verifizierungs-Mail gesendet an:", normEmail);
     } catch (mailErr) {
       console.warn(
         "Mailversand deaktiviert/fehlgeschlagen:",
@@ -375,7 +436,8 @@ app.post("/register", async (req, res) => {
     }
 
     return res.status(201).json({
-      message: "Registrierung erfolgreich ✅",
+      message:
+        "Registrierung erfolgreich. Bitte überprüfe deine E-Mails und bestätige deine Adresse.",
       user: sanitize(userRecord),
     });
   } catch (e) {
@@ -401,10 +463,11 @@ app.post("/login", async (req, res) => {
       return res
         .status(401)
         .json({ message: "Ungültige E-Mail oder Passwort" });
+
     if (!user.isVerified) {
-      return res
-        .status(403)
-        .json({ message: "Bitte bestätige zuerst deine E-Mail." });
+      return res.status(403).json({
+        message: "Bitte bestätige zuerst deine E-Mail.",
+      });
     }
 
     const ok = await bcrypt.compare(
@@ -422,6 +485,82 @@ app.post("/login", async (req, res) => {
   } catch (e) {
     console.error("LOGIN ERROR:", e);
     return res.status(500).json({ message: "Serverfehler bei Login" });
+  }
+});
+
+// 🔗 GET /verify-email?token=...
+app.get("/verify-email", (req, res) => {
+  try {
+    const token = String(req.query.token || "").trim();
+    if (!token) {
+      return res
+        .status(400)
+        .send("<h1>Fehler</h1><p>Kein Token angegeben.</p>");
+    }
+
+    const users = readUsers();
+    const idx = users.findIndex(
+      (u) => u.emailVerifyToken && u.emailVerifyToken === token
+    );
+
+    if (idx === -1) {
+      return res
+        .status(400)
+        .send(
+          "<h1>Link ungültig</h1><p>Der Bestätigungslink ist ungültig oder wurde bereits verwendet.</p>"
+        );
+    }
+
+    const user = users[idx];
+
+    // Ablauf prüfen (falls gesetzt)
+    if (user.emailVerifyExpires) {
+      const exp = new Date(user.emailVerifyExpires).getTime();
+      if (!Number.isNaN(exp) && Date.now() > exp) {
+        return res
+          .status(400)
+          .send(
+            "<h1>Link abgelaufen</h1><p>Der Bestätigungslink ist abgelaufen. Bitte registriere dich erneut.</p>"
+          );
+      }
+    }
+
+    // ✅ verifizieren
+    user.isVerified = true;
+    user.emailVerifyToken = null;
+    user.emailVerifyExpires = null;
+    user.verifiedAt = new Date().toISOString();
+    users[idx] = user;
+    writeUsers(users);
+
+    return res.send(`
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Ayozia – E-Mail bestätigt</title>
+          <style>
+            body { font-family: system-ui, sans-serif; background:#05000b; color:#fff; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+            .card { background:#140021; padding:24px 28px; border-radius:16px; text-align:center; max-width:420px; box-shadow:0 0 40px rgba(255,0,200,0.25); }
+            h1 { margin-bottom:12px; }
+            p { margin:4px 0; color:#ddd; }
+            .accent { color:#ff4fd8; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h1>E-Mail bestätigt 🎉</h1>
+            <p>Danke, <span class="accent">${user.username}</span>.</p>
+            <p>Dein Ayozia-Konto wurde erfolgreich aktiviert.</p>
+            <p>Du kannst jetzt die Ayozia-App öffnen und dich einloggen.</p>
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (e) {
+    console.error("VERIFY-EMAIL ERROR:", e);
+    return res
+      .status(500)
+      .send("<h1>Fehler</h1><p>Interner Serverfehler.</p>");
   }
 });
 
